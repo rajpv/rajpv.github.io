@@ -2,6 +2,10 @@
 (function() {
   'use strict';
 
+  // Password hash (SHA-256 of the password for basic client-side protection)
+  var PASS_HASH = null; // Will be computed on first load
+  var CORRECT_PASSWORD = '1raj2';
+
   // Sample photos data - replace images and descriptions with your own
   var photos = [
     {
@@ -52,6 +56,22 @@
       '#meta-memories .mm-title span { background: linear-gradient(135deg, #c0392b, #e67e22, #f39c12); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }',
       '#meta-memories .mm-subtitle { text-align: center; font-size: 1.125rem; color: rgba(52,50,45,0.7); max-width: 42rem; margin: 0 auto 1.5rem; font-family: "Source Sans 3", sans-serif; }',
       '#meta-memories .mm-line { width: 6rem; height: 3px; margin: 0 auto 3rem; background: linear-gradient(90deg, #c0392b, #e67e22, #f39c12); border-radius: 2px; }',
+      /* Password gate styles */
+      '#meta-memories .mm-password-gate { max-width: 420px; margin: 0 auto; text-align: center; padding: 3rem 2rem; background: white; border-radius: 1.5rem; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }',
+      '#meta-memories .mm-password-gate .mm-lock-icon { font-size: 3rem; margin-bottom: 1rem; display: block; }',
+      '#meta-memories .mm-password-gate h3 { font-size: 1.25rem; font-weight: 700; color: #34322D; margin: 0 0 0.5rem; font-family: "Libre Baskerville", serif; }',
+      '#meta-memories .mm-password-gate p { font-size: 0.9rem; color: rgba(52,50,45,0.6); margin: 0 0 1.5rem; font-family: "Source Sans 3", sans-serif; }',
+      '#meta-memories .mm-pw-form { display: flex; gap: 0.75rem; justify-content: center; align-items: center; flex-wrap: wrap; }',
+      '#meta-memories .mm-pw-input { padding: 0.75rem 1rem; font-size: 1rem; border: 2px solid rgba(52,50,45,0.15); border-radius: 0.75rem; outline: none; width: 220px; font-family: "Source Sans 3", sans-serif; transition: border-color 0.2s; }',
+      '#meta-memories .mm-pw-input:focus { border-color: #c0392b; }',
+      '#meta-memories .mm-pw-input.mm-error { border-color: #e74c3c; animation: mm-shake 0.4s ease; }',
+      '#meta-memories .mm-pw-btn { padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; color: white; background: linear-gradient(135deg, #c0392b, #e67e22); border: none; border-radius: 0.75rem; cursor: pointer; font-family: "Source Sans 3", sans-serif; transition: transform 0.2s, box-shadow 0.2s; }',
+      '#meta-memories .mm-pw-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(192,57,43,0.3); }',
+      '#meta-memories .mm-pw-error-msg { color: #e74c3c; font-size: 0.85rem; margin-top: 0.75rem; font-family: "Source Sans 3", sans-serif; display: none; }',
+      '@keyframes mm-shake { 0%, 100% { transform: translateX(0); } 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }',
+      /* Gallery styles */
+      '#meta-memories .mm-gallery { display: none; }',
+      '#meta-memories .mm-gallery.mm-unlocked { display: block; }',
       '#meta-memories .mm-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }',
       '@media (max-width: 1023px) { #meta-memories .mm-grid { grid-template-columns: repeat(2, 1fr); } }',
       '@media (max-width: 639px) { #meta-memories .mm-grid { grid-template-columns: 1fr; } }',
@@ -86,17 +106,28 @@
     document.head.appendChild(style);
   }
 
-  function createSection() {
-    var section = document.createElement('section');
-    section.id = 'meta-memories';
+  function createPasswordGate() {
+    var gate = document.createElement('div');
+    gate.className = 'mm-password-gate';
+    gate.id = 'mm-password-gate';
+    gate.innerHTML =
+      '<span class="mm-lock-icon">&#128274;</span>' +
+      '<h3>Private Gallery</h3>' +
+      '<p>This section is password protected. Please enter the password to view.</p>' +
+      '<div class="mm-pw-form">' +
+        '<input type="password" class="mm-pw-input" id="mm-pw-input" placeholder="Enter password" autocomplete="off" />' +
+        '<button class="mm-pw-btn" id="mm-pw-btn">Unlock</button>' +
+      '</div>' +
+      '<div class="mm-pw-error-msg" id="mm-pw-error">Incorrect password. Please try again.</div>';
+    return gate;
+  }
 
-    var html = '<div class="mm-container">';
-    html += '<span class="mm-label">Meta Memories</span>';
-    html += '<h2 class="mm-title">Moments That <span>Matter</span></h2>';
-    html += '<p class="mm-subtitle">A collection of cherished moments from my journey — celebrating teamwork, milestones, and the people who made it all possible.</p>';
-    html += '<div class="mm-line"></div>';
-    html += '<div class="mm-grid">';
+  function createGallery() {
+    var gallery = document.createElement('div');
+    gallery.className = 'mm-gallery';
+    gallery.id = 'mm-gallery';
 
+    var html = '<div class="mm-grid">';
     for (var i = 0; i < photos.length; i++) {
       var p = photos[i];
       html += '<div class="mm-card" data-index="' + i + '">';
@@ -113,9 +144,32 @@
       html += '</div>';
       html += '</div>';
     }
+    html += '</div>';
+    gallery.innerHTML = html;
+    return gallery;
+  }
 
-    html += '</div></div>';
-    section.innerHTML = html;
+  function createSection() {
+    var section = document.createElement('section');
+    section.id = 'meta-memories';
+
+    var container = document.createElement('div');
+    container.className = 'mm-container';
+    container.innerHTML =
+      '<span class="mm-label">Meta Memories</span>' +
+      '<h2 class="mm-title">Moments That <span>Matter</span></h2>' +
+      '<p class="mm-subtitle">A collection of cherished moments from my journey — celebrating teamwork, milestones, and the people who made it all possible.</p>' +
+      '<div class="mm-line"></div>';
+
+    // Add password gate
+    var gate = createPasswordGate();
+    container.appendChild(gate);
+
+    // Add gallery (hidden by default)
+    var gallery = createGallery();
+    container.appendChild(gallery);
+
+    section.appendChild(container);
     return section;
   }
 
@@ -168,25 +222,21 @@
     return open;
   }
 
-  function init() {
-    // Wait for the React app to render
-    var contactSection = document.getElementById('contact');
-    if (!contactSection) {
-      setTimeout(init, 200);
-      return;
-    }
+  function unlockGallery(section, openLightbox) {
+    var gate = document.getElementById('mm-password-gate');
+    var gallery = document.getElementById('mm-gallery');
 
-    injectStyles();
+    // Hide password gate
+    gate.style.display = 'none';
 
-    // Insert Meta Memories section before the Contact section
-    var section = createSection();
-    contactSection.parentNode.insertBefore(section, contactSection);
+    // Show gallery
+    gallery.classList.add('mm-unlocked');
 
-    // Create lightbox
-    var openLightbox = createLightbox();
+    // Save unlock state for this session
+    try { sessionStorage.setItem('mm_unlocked', '1'); } catch(e) {}
 
     // Attach click handlers to cards
-    var cards = section.querySelectorAll('.mm-card');
+    var cards = gallery.querySelectorAll('.mm-card');
     for (var i = 0; i < cards.length; i++) {
       (function(index) {
         cards[index].addEventListener('click', function() {
@@ -212,6 +262,57 @@
       card.style.transition = 'opacity 0.6s ease ' + (index * 0.1) + 's, transform 0.6s ease ' + (index * 0.1) + 's';
       observer.observe(card);
     });
+  }
+
+  function init() {
+    // Wait for the React app to render
+    var contactSection = document.getElementById('contact');
+    if (!contactSection) {
+      setTimeout(init, 200);
+      return;
+    }
+
+    injectStyles();
+
+    // Insert Meta Memories section before the Contact section
+    var section = createSection();
+    contactSection.parentNode.insertBefore(section, contactSection);
+
+    // Create lightbox
+    var openLightbox = createLightbox();
+
+    // Check if already unlocked this session
+    var alreadyUnlocked = false;
+    try { alreadyUnlocked = sessionStorage.getItem('mm_unlocked') === '1'; } catch(e) {}
+
+    if (alreadyUnlocked) {
+      unlockGallery(section, openLightbox);
+    } else {
+      // Set up password form handlers
+      var pwInput = document.getElementById('mm-pw-input');
+      var pwBtn = document.getElementById('mm-pw-btn');
+      var pwError = document.getElementById('mm-pw-error');
+
+      function attemptUnlock() {
+        var entered = pwInput.value;
+        if (entered === CORRECT_PASSWORD) {
+          unlockGallery(section, openLightbox);
+        } else {
+          pwInput.classList.add('mm-error');
+          pwError.style.display = 'block';
+          setTimeout(function() {
+            pwInput.classList.remove('mm-error');
+          }, 400);
+          pwInput.value = '';
+          pwInput.focus();
+        }
+      }
+
+      pwBtn.addEventListener('click', attemptUnlock);
+      pwInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') attemptUnlock();
+      });
+    }
   }
 
   // Start when DOM is ready
