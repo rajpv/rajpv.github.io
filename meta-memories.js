@@ -56,6 +56,12 @@
       '#meta-memories .mm-title span { background: linear-gradient(135deg, #c0392b, #e67e22, #f39c12); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }',
       '#meta-memories .mm-subtitle { text-align: center; font-size: 1.125rem; color: rgba(52,50,45,0.7); max-width: 42rem; margin: 0 auto 1.5rem; font-family: "Source Sans 3", sans-serif; }',
       '#meta-memories .mm-line { width: 6rem; height: 3px; margin: 0 auto 3rem; background: linear-gradient(90deg, #c0392b, #e67e22, #f39c12); border-radius: 2px; }',
+      /* Hidden by default - slide/fade reveal */
+      '#meta-memories.mm-section-hidden { display: none; }',
+      '#meta-memories.mm-section-revealing { display: block; animation: mm-section-reveal 0.6s ease forwards; }',
+      '@keyframes mm-section-reveal { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }',
+      '#meta-memories.mm-section-hiding { animation: mm-section-hide 0.4s ease forwards; }',
+      '@keyframes mm-section-hide { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(30px); } }',
       /* Password gate styles */
       '#meta-memories .mm-password-gate { max-width: 420px; margin: 0 auto; text-align: center; padding: 3rem 2rem; background: white; border-radius: 1.5rem; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }',
       '#meta-memories .mm-password-gate .mm-lock-icon { font-size: 3rem; margin-bottom: 1rem; display: block; }',
@@ -264,6 +270,70 @@
     });
   }
 
+  // Track section visibility state
+  var sectionVisible = false;
+
+  function showSection(section) {
+    if (sectionVisible) return;
+    sectionVisible = true;
+    section.classList.remove('mm-section-hidden', 'mm-section-hiding');
+    section.classList.add('mm-section-revealing');
+    // After animation completes, remove the class so it stays visible
+    setTimeout(function() {
+      section.classList.remove('mm-section-revealing');
+    }, 600);
+    // Scroll to the section after a brief delay for the reveal to start
+    setTimeout(function() {
+      section.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  }
+
+  function hideSection(section) {
+    if (!sectionVisible) return;
+    sectionVisible = false;
+    section.classList.add('mm-section-hiding');
+    setTimeout(function() {
+      section.classList.remove('mm-section-hiding');
+      section.classList.add('mm-section-hidden');
+    }, 400);
+  }
+
+  function toggleSection(section) {
+    if (sectionVisible) {
+      hideSection(section);
+    } else {
+      showSection(section);
+    }
+  }
+
+  function interceptNavClicks(section) {
+    // Intercept clicks on any link/button that targets #meta-memories
+    document.addEventListener('click', function(e) {
+      var target = e.target;
+      // Walk up the DOM to find a clickable element
+      while (target && target !== document) {
+        // Check for anchor tags with href="#meta-memories"
+        if (target.tagName === 'A' && target.getAttribute('href') === '#meta-memories') {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleSection(section);
+          return;
+        }
+        // Check for nav menu items that contain "META MEMORIES" or "Meta Memories" text
+        // The React nav uses buttons/spans with onClick that calls scrollIntoView
+        var text = (target.textContent || '').trim();
+        if ((text === 'META MEMORIES' || text === 'Meta Memories') &&
+            (target.tagName === 'BUTTON' || target.tagName === 'A' || target.tagName === 'SPAN' || target.tagName === 'LI')) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleSection(section);
+          return;
+        }
+        target = target.parentNode;
+      }
+    }, true); // Use capture phase to intercept before React handlers
+  }
+
   function init() {
     // Wait for the React app to render
     var contactSection = document.getElementById('contact');
@@ -277,6 +347,13 @@
     // Insert Meta Memories section before the Contact section
     var section = createSection();
     contactSection.parentNode.insertBefore(section, contactSection);
+
+    // Start hidden by default
+    section.classList.add('mm-section-hidden');
+    sectionVisible = false;
+
+    // Intercept navigation clicks to toggle visibility instead of scrolling
+    interceptNavClicks(section);
 
     // Create lightbox
     var openLightbox = createLightbox();
